@@ -1,0 +1,158 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+```{r}
+library(haven)
+library(ggplot2)
+library(rstatix)
+library(tidyverse)
+library(skimr)
+library(descr)
+library(labelled)
+url <- "https://github.com/drCES/winter_603/raw/main/California%20Real%20Estate%20Data%20-%202015%20Ahmed.dta"
+
+# Import the data into R
+data <- read_dta(url)
+```
+
+# Setup
+```{r}
+head(data)
+tail(data)
+
+summary(data)
+skim(data)
+```
+
+```{r}
+freq(data$bedrooms_5)
+freq(data$bathrooms_rnd)
+```
+
+```{r}
+ggplot(data, aes(x = sqft)) +
+  geom_histogram(aes(y = after_stat(density)), position = "identity", bins = 10, alpha = 0.25, color="black") +
+  labs(title = "Histogram Plot of House Square Ft",
+       x = "Square Ft",
+       y = "Density") +
+  theme_minimal()
+
+ggplot(data, aes(x = price)) +
+  geom_histogram(aes(y = after_stat(density)), position = "identity", bins = 10, alpha = 0.25, color="black") +
+  labs(title = "Histogram Plot of House Price",
+       x = "Price",
+       y = "Density") +
+  theme_minimal()
+```
+
+# Part 1: Descriptive Data Review:
+
+
+1) Describe what type of variable each is (continuous, nominal, ordinal, etc)
+- sqft: continuous. ratio scale
+- price: continuous. ratio scale
+- bedroom_5: discrete & ordinal. ratio scale
+- bathrooms_rnd: discrete & ordinal. ratio scale
+2) Describe what type of probability function is appropriate for that variable (PMF or PDF)
+- sqft: PDF
+- price: PDF
+- bedroom_5: PMF
+- bathrooms_rnd: PMF
+3) Create a histogram that shows the distribution of each variable
+
+
+```{r}
+ggplot(data, aes(x = bathrooms_rnd)) +
+  geom_histogram(aes(y = after_stat(density)), position = "identity", alpha = 0.25, color="black") +
+  labs(title = "Histogram Plot of House Bathrooms",
+       x = "Bathrooms",
+       y = "Density") +
+  theme_minimal()
+
+ggplot(data, aes(x = bedrooms_5)) +
+  geom_histogram(aes(y = after_stat(density)), position = "identity",  alpha = 0.25, color="black") +
+  labs(title = "Histogram Plot of House bathrooms_rnd",
+       x = "Bedrooms",
+       y = "Density") +
+  theme_minimal()
+
+ggplot(data, aes(x = sqft)) +
+  geom_histogram(aes(y = after_stat(density)), position = "identity", bins = 30, alpha = 0.25, color="black") +
+  labs(title = "Histogram Plot of House Square Ft",
+       x = "Square Ft",
+       y = "Density") +
+  theme_minimal()
+
+ggplot(data, aes(x = price)) +
+  geom_histogram(aes(y = after_stat(density)), position = "identity", bins = 30, alpha = 0.25, color="black") +
+  labs(title = "Histogram Plot of House Price",
+       x = "Price",
+       y = "Density") +
+  theme_minimal()
+```
+4) Calculate the mean and standard deviation of each variable
+
+```{r}
+skim(data)
+sprintf("Mean of sqft: %.2f", 2364.9046728972)
+sprintf("Standard Deviation of sqft: %.2f", 1224.55698183349)
+
+sprintf("Mean of price: %.2f", 589362.811214953)
+sprintf("Standard Deviation of price: %.2f", 509026.067649057)
+
+sprintf("Mean of bedroom: %f", 3.36635514018692)
+sprintf("Standard Deviation of bedroom: %.2f", 1.07420765375093)
+
+sprintf("Mean of bathroom: %f", 2.79065420560748)
+sprintf("Standard Deviation of bathroom: %.2f", 1.05694889043006)
+```
+
+5) Find the modal number of bedrooms and bathrooms in the dataset
+
+- bedroom: 3 bedrooms is the most frequent
+- bathroom: 2 bathrooms is the most frequent
+
+```{r}
+freq(data$bedrooms_5, plot=F)
+freq(data$bathrooms_rnd, plot=F)
+```
+
+6) For the two continuous variables in the dataset,
+- Create a 95% confidence interval (Decide if you will use the Gaussian or Student's T distribution first)
+```{r}
+# price
+ci_price <- t.test(data$price, conf.level = 0.95)
+print("95% confidence interval for House Price")
+ci_price$conf.int
+
+ci_sqft <- t.test(data$sqft, conf.level = 0.95)
+print("95% confidence interval for House Square Ft")
+ci_sqft$conf.int
+```
+
+- Calculate the z-score for each individual value and save it as a new column in the dataset
+```{r}
+
+data_update <-data %>%
+  mutate(
+         zscore_price = (price - mean(price))/sd(price),
+         zscore_sqft = (sqft - mean(sqft))/sd(sqft))
+
+print(data_update)
+```
+
+8) Describe what you see in the 95% confidence intervals
+- Price: The 95% confidence interval tells us that there is 95% chance that the true population mean of house price is within the range [546131.7, 632593.9] based on our sample data.
+- Price: The 95% confidence interval tells us that there is 95% chance that the true population mean of house square ft is within the range [2260.904, 2468.905] based on our sample data.
+
+#Part 2: Hypothesis Creation
+
+1) H0 = Average Price of Home is the Same for Houses with 3 Bedrooms vs 4 Bedrooms, HA = Average Price of Home is NOT the Same for Houses with 3 Bedrooms vs 4 Bedrooms
+   - HA = Average Price of Home with 4 Bedrooms > Home with 3 Bedrooms
+2) H0 = Average Price of Home is the Same for Houses with Square Footage >= 2364.90 vs Square Footage < 2364.90, HA = Average Price of Home is NOT the Same for Houses with Houses Square Footage >= 2364.90 vs Square Footage < 2364.90
+   - HA = Average price of Homes is Greater for Homes with Square Footage >= 2364.90
+3) H0 = Average Price of Home is the Same for Houses with 3 Bathrooms vs 4 Bathrooms, HA = Average Price of Home is NOT the Same for Houses with 3 Bathrooms vs 4 Bathrooms
+   - HA = Average Price of Home with 4 Bathrooms > Home with 3 Bathrooms

@@ -1,0 +1,170 @@
+---
+title: "Assignment 3"
+output:
+  html_document:
+    df_print: paged
+---
+```{r}
+library(haven)
+library(skimr)
+library(stargazer)
+library(ggeffects)
+library(ggplot2)
+library(corrplot)
+
+
+url <- "https://raw.githubusercontent.com/drCES/winter_603/main/crime_data.dta"
+crime_data <- read_dta(url)
+
+head(crime_data)
+```
+
+```{r}
+summary(crime_data)
+skim(crime_data)
+```
+
+# Part 1: Model Building
+
+Which, if any, independent variables potentially could have a reverse/simultaneity casualty issue?
+- Reverse Issue:
+  - "policbudgperpop" could cause a reverse issue. Does a higher police budget lead to more crime or does more crime lead to an increase in police budget?
+- Simultaneity Issue:
+  - "policbudgperpop" could also be the case were both crime rates and police budget interact with each other causing both to increase/decrease depending on their change.
+
+Are they any independent variables that might be so highly correlated with other independent variables that they might cause issues in your model?
+- "rentmedian" and "medincome" are highly correlated and might cause problem as it could add extra bias to our model. It makes sense for area's with higher median income would have higher rents. I would choose to keep one of these variables.
+
+
+What independent variables should be included in the model? Select your "final" model variables in this section. Remember the rule we reviewed in lecture about the relationship between sample size in the regression model and number of independent variables.
+
+## Picking IVs
+
+```{r}
+crime_cor <- cor(crime_data[, unlist( lapply(crime_data, is.numeric))], use="pairwise.complete.obs")
+crime_cor
+```
+
+```{r}
+corrplot(crime_cor, method = 'color', addCoef.col = "black")
+```
+
+Based on the correlation matrix above, I am interested in the following fields:
+- Police Budget Per Pop: I assume areas with higher crime will have higher police budgets.
+- Median Income: I assume places with lower incomes are more likely to have crime. I believe poorer places are more prone to crime due to economic hardships and lack of resources.
+- Percent Unemployed: I assume higher rates of unemployment leads more crime. I assume if people don't have jobs, they are more likely to perform crimes to get what they need/want.
+- Percent Kids to Parents: I believe children who lack a parent may be connected to some home life insecurity. Single parents are more busy. Child lost their parent due to hardship ext. Without a parent to look after a child, or a family has many kids and not all of them get the attention and care they need, they may fall into youth crime.
+- Population: I assume places with more people will have more crime rates. I am making this assumption because of high income inequality in the US. So larger populations will have greater inequality which may lead to more crime (especially dense areas).
+- Racial Match Composition: I assume areas that have a mismatch of police officers race to the communities race leads to higher crime. I believe this because the mismatch may prevent the police teams from understanding the communities they serve, thus reducing their effectiveness in reducing crime.
+
+```{r}
+pairs(crime_data[, c("violentcrimesperpop", "policbudgperpop", "pctunemployed", "pctkids2par", "medincome", "population","racialmatchcommpol")],
+      main = "Scatterplot Matrix of Water Dataset Variables",
+      pch = 19, col = "blue")
+```
+
+
+The charts above shows all 5 of my values have some correlation with crime rates except population. I will make 1 model including population and 1 model without it.
+
+```{r}
+ggplot(crime_data, aes(x = policbudgperpop)) +
+  geom_histogram(aes(y = after_stat(density)), position = "identity", bins = 30, alpha = 0.25, color="black") +
+  labs(title = "Histogram Plot of policbudgperpop",
+       x = "policbudgperpop",
+       y = "Density") +
+  theme_minimal()
+
+ggplot(crime_data, aes(x = pctunemployed)) +
+  geom_histogram(aes(y = after_stat(density)), position = "identity", bins = 30, alpha = 0.25, color="black") +
+  labs(title = "Histogram Plot of pctunemployed",
+       x = "pctunemployed",
+       y = "Density") +
+  theme_minimal()
+
+ggplot(crime_data, aes(x = pctkids2par)) +
+  geom_histogram(aes(y = after_stat(density)), position = "identity", bins = 30, alpha = 0.25, color="black") +
+  labs(title = "Histogram Plot of pctkids2par",
+       x = "pctkids2par",
+       y = "Density") +
+  theme_minimal()
+
+ggplot(crime_data, aes(x = medincome)) +
+  geom_histogram(aes(y = after_stat(density)), position = "identity", bins = 30, alpha = 0.25, color="black") +
+  labs(title = "Histogram Plot of medincome",
+       x = "medincome",
+       y = "Density") +
+  theme_minimal()
+
+ggplot(crime_data, aes(x = racialmatchcommpol)) +
+  geom_histogram(aes(y = after_stat(density)), position = "identity", bins = 30, alpha = 0.25, color="black") +
+  labs(title = "Histogram Plot of racialmatchcommpol",
+       x = "medincome",
+       y = "Density") +
+  theme_minimal()
+
+
+```
+
+The 4 IVs I selected seem somewhat normally distributed (there is some skewness from outliers). So I will keep them. (I was getting errors trying to get population to graph)
+
+# Part 2:
+
+## Building Model and Comparison
+Use Stargazer or jtools to report the results of the regression
+```{r}
+lm1 <- lm(violentcrimesperpop ~ policbudgperpop + pctunemployed + pctkids2par + medincome + racialmatchcommpol + population , data = crime_data)
+lm2 <- lm(violentcrimesperpop ~ policbudgperpop + pctunemployed + pctkids2par + medincome + racialmatchcommpol , data = crime_data)
+
+stargazer(lm1, lm2, digits = 2, type = "text", column.labels = c("LM1 with Pop", "LM2 without Pop"))
+```
+
+Talk about the beta weights in your in final model. Which variables are significant? Which are not? How do you know?
+- policbudgperpop: This value is significant (p<0.01).
+  - lm1: beta = 0.47. Police budget is positively related to violentcrimesperpop
+  - lm2: beta = 0.51. Police budget is slightly more positively related to violentcrimesperpop. This partially because lm2 has 1 less IV.
+- pctunemployed: Surprisingly this value is not significant.
+  - lm1: beta = 0.18. It is positively correlated with violentcrimesperpop
+  - lm2: beta = 0.17. It is positively correlated with violentcrimesperpop
+- pctkids2par: This value is significant (p<0.01).
+  - lm1: beta = -0.46. It is negatively correlated with violentcrimesperpop
+  - lm2: beta = -0.54. It is negatively correlated with violentcrimesperpop
+- medincome: Again, surprisingly this value is not significant.
+  - lm1: beta = -0.27. It is negatively correlated with violentcrimesperpop
+  - lm2: beta = -0.29. It is negatively correlated with violentcrimesperpop
+- racialmatchcommpol: This value is significant (p<0.05).
+  - lm1: beta = 0.18. It is negatively correlated with violentcrimesperpop
+  - lm2: beta = 0.18. It is negatively correlated with violentcrimesperpop
+- population: This value is significant (p<0.05).
+  - lm1: beta = 0.18. It is positively correlated with violentcrimesperpop
+  - lm2: not included
+
+- For the values in both lm1 and lm2. The IVs in lm1 have slightly lower betas. This may be because there are more IVs in lm1 compared to lm2.
+- I know which values are significant because of the *** which indicate the p-value of each IV in the starmap being less than 0.1, 0.05, and 0.01. No asterisk means the p-value was not significant.
+- The beta values tell me that, holding all else equal in my model, 1 unit increase in the IV leads to a beta increase/decrease (depending on if beta is positive or negative) in violentcrimesperpop
+
+Review the model fit statistics. What do you see?
+- lm1:
+  - R2: The IVs in model lm1 explain about 65% of the outcomes in violentcrimesperpop.
+  - Adjusted R2: The IVs in model lm1 explain about 63% of the outcomes in violentcrimesperpop. This value is less than R2 because of the penalty for having more IVs
+  - F Stat: Our F value indicates the explanatory value of our model as a whole is significant compared to just predicting the mean.
+- lm2:
+  - R2: The IVs in model lm1 explain about 63% of the outcomes in violentcrimesperpop.
+  - Adjusted R2: The IVs in model lm1 explain about 61% of the outcomes in violentcrimesperpop.
+  - F Stat: Our F value indicates the explanatory value of our model as a whole is significant compared to just predicting the mean.
+    - This value is more than lm1. This is interesting as lm2 has less IVs than lm1 and having more IVs tend increase the F value.
+    - This tells me lm2 is a simpler but more explanatory powerful model.
+
+Pick one significant independent variable and use the ggeffects package with the ggpredict function and create a predicted value plot that predicts violent crime rate based on the chosen IV
+```{r}
+non_int<-ggpredict(lm1, terms=c("pctkids2par")) #Manually set break points
+
+ggplot(non_int, aes(x = x, y = predicted, color = factor(group), group = factor(group))) +
+  geom_line() +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.05) +
+  labs(title = "Predicted Home Selling Price X with New Home Build or Not with Confidence Intervals",
+       x = "Percentage Kids to Parents",
+       y = "Violent Crime per Pop",
+       color = "CI") +
+  theme_minimal()
+```
+

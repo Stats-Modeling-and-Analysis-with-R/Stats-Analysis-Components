@@ -1,0 +1,176 @@
+---
+title: "Assignment 2"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(haven)
+library(rstatix)
+library(tidyverse)
+library(ggplot2)
+library(descr)
+
+url <-"https://github.com/drCES/winter_603/raw/main/California%20Real%20Estate%20Data%20-%202015%20Ahmed.dta"
+
+# Import the data into R
+data <- read_dta(url)
+
+data_subset <-data %>%
+  filter(bedrooms==4 | bedrooms==3)
+```
+
+# Part 1
+## A. T-Tests:
+
+For 3 and 4 bedroom homes only (meaning create a new subset of the overall data that only includes homes with 3 or 4 bedrooms), run a t-test using the Welch's test looking at differences in...
+- Price
+- Square footage
+- Bathrooms
+
+```{r}
+var.test(data_subset$price~data_subset$bedrooms)
+var.test(data_subset$sqft~data_subset$bedrooms)
+var.test(data_subset$bathrooms~data_subset$bedrooms)
+```
+
+```{r}
+price_welch <- t.test(data_subset$price ~ data_subset$bedrooms, var.equal = FALSE)
+sqft_welch <- t.test(data_subset$sqft ~ data_subset$bedrooms, var.equal = FALSE)
+bathrooms_welch <- t.test(data_subset$bathrooms ~ data_subset$bedrooms, var.equal = FALSE)
+print(price_welch)
+print(sqft_welch)
+print(bathrooms_welch)
+```
+
+
+Interpret the results including...
+and
+Identify which tests include a statistically significant difference between 3 and 4 bedroom homes and explain why that result should be considered statistically significant.
+
+Answer:
+- The means for each IV by bedroom
+  - Price:
+    - The difference in mean Price between 3 Bedrooms and 4 Bedrooms is (585197.2 - 755777.0 = -170579.8)
+    - The CI states were are 95% confident the true difference in mean is within the range [-281924.73, -59234.92]
+  - Square footage:
+    - - The difference in mean Square footage between 3 Bedrooms and 4 Bedrooms is (2020.022 - 2930.690 = -910.668)
+    - The CI states were are 95% confident the true difference in mean is within the range [-1141.2412, -680.0942]
+  - Bathrooms:
+    - - The difference in mean Bathrooms between 3 Bedrooms and 4 Bedrooms is (2.365385 - 3.048276 = -0.682891)
+    - The CI states were are 95% confident the true difference in mean is within the range [-0.8421944, -0.5235881]
+
+- The amount of variability there is around each mean
+  - Price: 95% confident the true ratio of variance for Price between 3 Bedrooms and 4 Bedrooms is in the range [0.3160191, 0.5881974]
+  - Square footage: 95% confident the true ratio of variance for Square footage between 3 Bedrooms and 4 Bedrooms is in the range [0.2393000, 0.4454024]
+  - Bathrooms:95% confident the true ratio of variance for Bathrooms between 3 Bedrooms and 4 Bedrooms is in the range [0.4358665, 0.8112661]
+
+- T-test statistic
+  - Price: t = -3.018 --> Houses with 4 bedrooms have greater Price (on average) than houses with 3 bedroom
+  - Square footage: t = -7.7844  --> Houses with 4 bedrooms have greater Square footage (on average) than houses with 3 bedroom
+  - Bathrooms: t = -8.4403  --> Houses with 4 bedrooms have greater Bathrooms (on average) than houses with 3 bedroom
+
+- P-value
+  - Price: P-Value 0.002821 < 0.01 --> test is significant. We reject the null that Houses with 3 Bedrooms have same Price as Houses with 4 Bedrooms
+  - Square footage: P-Value 2.826e-13 < 0.01 --> test is significant. We reject the null that Houses with 3 Bedrooms have same Square footage as Houses with 4 Bedrooms
+  - Bathrooms: P-Value 2.073e-15 < 0.01 --> test is significant. We reject the null that Houses with 3 Bedrooms have same Bathrooms as Houses with 4 Bedrooms
+
+## B. ANOVA:
+
+- Using the full dataset, run an ANOVA with the Bonferroni and TukeyHSD corrections, using bedrooms - specifically the 'bedrooms_5' variable - as the IV and price as the DV.
+
+
+```{r}
+means<-data %>%
+  group_by(bedrooms_5) %>%
+  summarise(mean = mean(price),
+            sd = sd(price),
+            n=n())
+print(means)
+
+anova_result <- aov(price ~ as.factor(bedrooms_5), data = data)
+print(summary(anova_result))
+
+print("====================== TukeyHSD")
+TukeyHSD(anova_result)
+
+print("====================== Bonferroni")
+pairwise.t.test(data$price, data$bedrooms_5, p.adjust.method = "bonferroni")
+```
+
+- Fully interpret what you see in each analysis including:
+  - Mean of price by number of bedrooms
+    - Bedrooms 1:236529.2109375
+    - Bedrooms 2:585197.214285714
+    - Bedrooms 3:755777.04137931
+    - Bedrooms 4:797268.508196721
+    - Bedrooms 5:1068759.05263158
+  - Significant differences between the pairwise comparisons
+    - Our ANOVA p-value < 2e-16 which is less than 0.01 thus our test is significant. We reject the null that there are no difference in mean between our groups.
+      - TukeyHSD:
+            - Bedroom groups 3-2, 4-2, 5-2, 6-2, 4-3, 6-3 all have p-vals less than 0.01. These beds our test shows high significance. Indicating their means are not the same
+               -   5-3 and 6-4 have vals less than 0.05
+      - Bonferroni:
+        - 3-2, 4-2, 5-2, 6-2, 2-3, and 6-3 all have p-vals less than 0.01
+  - Are there differences in the p-values between the two approaches? If so, which test is more conservative (i.e. which test reports larger p-values)?
+    - Yes there are some differences between the tests. It seems the Bonferroni test is slightly more conservative as it has larger p-values
+- Which size house, on average, sells for the most money? Explain what you see in the results that allows you to draw that conclusion.
+I believe house sizes with 6 bedrooms sell for the most on average. I am to this conclusion because looking at the TukeyHSD results, you see that the differences with houses with 6 bedrooms vs 2,3,4,5 bedrooms is the largest.
+# Part 2: Correlations
+## Task A:
+Using the entire real-estate data (excluding zip code), calculate each of the following correlation types for each variable:
+- Pearson’s R
+- Spearman’s Rank
+- Kendall’s Tau
+
+
+```{r}
+data_new <-data %>%
+  dplyr::select(price, sqft, bedrooms, bedrooms_5, bathrooms, bathrooms_rnd)
+cor(data_new, method="pearson", use="complete.obs")
+cor(data_new, method="spearman", use="complete.obs")
+cor(data_new, method="kendall", use="complete.obs")
+```
+
+Describe what you see in the correlations. Are some variables correlated at higher rates than others? What do the actual correlation values tell you about the relationships?
+- It looks like Price is not highly correlated with any singular variable. All less than .5
+- Bedrooms and Bedrooms_5 and Bathrooms and Bathrooms_rnd are very highly correlated with each other. This makes sense because I believe they are slight modifications of the original column
+- It seems Square footage is highly correlated with bedrooms and bathrooms. This makes sense as bigger homes can have more bedrooms and bathrooms.
+- The correlation values indicate how closely the 2 variables are linearly related to each other. It does not indicate cause and effect.
+## Task B:
+
+1) Identify the two “continuous” variables, and decide which is the DV and which is the IV, in the dataset then create a scatter plot putting the appropriate variable on the y and x-axes.
+Bonus: Add the correlation coefficient to the plot using the annotate command we reviewed
+
+
+```{r}
+ggplot(data_subset, aes(x = data_subset$sqft, y = data_subset$price)) +
+  geom_point(color = "blue", size = 3) +
+  labs(title = "Scatterplot Square Footage vs Price",
+       x = "Square Footage",
+       y = "Price") +
+  theme_minimal() + annotate("text",
+             x = Inf, y = -Inf,
+             label = paste("Pearson's r =", round(cor(x=data_subset$sqft, y=data_subset$price, method="pearson", use="complete.obs"), 2)),
+             hjust = 1.1, vjust = -0.5,
+             size = 4, color = "red")
+```
+
+2) Create a scatter plot between price, as the DV, and bathrooms as the IV. What do you see in this plot? Is it as useful as the plot created in Part 1?
+
+```{r}
+ggplot(data_subset, aes(x = data_subset$bathrooms, y = data_subset$price)) +
+  geom_point(color = "blue", size = 3) +
+  labs(title = "Scatterplot Bathrooms vs Price",
+       x = "Square Footage",
+       y = "Price") +
+  theme_minimal() + annotate("text",
+             x = Inf, y = -Inf,
+             label = paste("Pearson's r =", round(cor(x=data_subset$bathrooms, y=data_subset$price, method="pearson", use="complete.obs"), 2)),
+             hjust = 1.1, vjust = -0.5,
+             size = 4, color = "red")
+```
+
+The "Bathrooms vs Price" Scatterplot shows House price for the number of bathrooms in a home. It has a pearson's r of 0.51. Thus, there is a slight linear trend where more bathrooms increase increased house price. Since bathrooms is discrete the plot has price values at certain intervals.
+I think its as useful as the "Square Footage vs Price" plot. They both show the linear correlative trend between price and an IV.

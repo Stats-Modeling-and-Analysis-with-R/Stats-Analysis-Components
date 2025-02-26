@@ -1,0 +1,262 @@
+---
+title: "Assignment 5"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(haven)
+library(ggplot2)
+library(ggeffects)
+library(tidyverse)
+library(stargazer)
+library(skimr)
+library(caret)
+
+
+data <- read_dta("anes_2020_reduced.dta")
+head(data)
+summary(data)
+skim(data)
+```
+
+
+# Part 1: Hypotheses
+Write a Null and alternative hypotheses, including a directional one, for how the following should influence a person's likelihood to donate money in politics"
+
+- Annual Income
+  - H0: Annual income is not likely to determine if someone will donate
+  - HA: Annual is likely to determine if someone will donate
+- A variable of your choosing
+  - H0: Trump voters are equally likely to donate as other voters
+  - HA: Trump voters are more likely to donate compared to other voters
+
+# Part 2: Model Estimation
+1) Estimate the first model using both logit and probit estimators. Interpret the relationship between each variable and the DV.
+
+
+```{r}
+m1_logit <- glm(donate ~ age + female + education + trump_vote + poc + ideo_str + party_str, data = data, family = binomial(link = "logit"))
+m1_probit <- glm(donate ~ age + female + education + trump_vote + poc + ideo_str + party_str, data = data, family = binomial(link = "probit"))
+stargazer(m1_logit, m1_probit, digits = 2, type = "text", column.labels = c("Model 1 Logit", "Model 1 Probit" ))
+```
+
+- Which variables have a positive and significant relationship?
+  - m1_logit: age, education, idea_str, part_str
+  - m1_probit: age, education, idea_str, party_str
+
+- Which ones have a negative and significant relationship?
+  - m1_logit: female, trump_vote
+  - m1_probit: female, trump_vote
+
+- Which ones are not significantly related?
+  - m1_logit: poc
+  - m1_probit: poc
+
+- Are there any differences in conclusions between the logit and probit models?
+  - The logit and probit models have the same beta p-value significance and trends to each other.
+  - The absolute beta values of the logit model is greater than the probit model. The logit model's beta values have a greater strength for their IVs
+  - The order of the beta values for the IVs from greatest to least is the same between the model.
+
+- Pay close attention to the variable you selected in Part 1 and decide if you reject or fail to reject the null hypothesis
+  - The trump_vote IV is significant so we reject our null that Trump voters donate the same amount as non trump voters.
+
+- Remember for factor variables, interpret the coefficient relative to the baseline group - which will be the group you do not
+see listed in the output.
+
+Run the GLM Model fit function Download GLM Model fit function and compare the two model using the AIC and BIC. Does the logit or probit approach result in better model fit statistics?
+
+
+```{r}
+glm_fit <- function(model) {
+  # Calculate Likelihood Ratio
+  lr <- logLik(model)
+
+  # Calculate AIC
+  aic <- AIC(model)
+
+  # Calculate BIC
+  n <- nobs(model)
+  p <- length(coef(model))
+  bic <- -2 * logLik(model) + p * log(n)
+
+  # Calculate Deviance
+  deviance <- summary(model)$deviance
+
+  # Return the metrics as a list
+  metrics <- data.frame(Likelihood_Ratio = lr, AIC = aic, BIC = bic, Deviance = deviance)
+  return(metrics)
+}
+```
+
+```{r}
+glm_fit(m1_logit)
+glm_fit(m1_probit)
+
+```
+
+The m1_probit model has lower scores for BIC and AIC thus it scores better. We have the same IVs in both models and they are not a nested model so we don't care about the likelihood ratio test.
+
+2) Next, run the second model, adding "income_group" to the regression. Select logit or probit based on which estimator produced a better fitting model. This creates a set of nested models, which allows you to use the Likelihood Ratio Test and Deviance values.
+
+
+```{r}
+m2_probit <- glm(donate ~ age + female + education + trump_vote + poc + ideo_str + party_str + income_group, data = data, family = binomial(link = "probit"))
+stargazer(m1_probit, m2_probit, digits = 2, type = "text", column.labels = c("Model 1 Probit", "Model 2 Probit" ))
+glm_fit(m1_probit)
+glm_fit(m2_probit)
+
+
+```
+
+m2_probit has a higher likelihood ratio result and smaller deviance, thus it is a better model when we include income_group.
+
+- Interpret the coefficients on the income_group variable. Is there a relationship?
+  - IVs that are positive and significant relationship
+    - m2_probit: age, education, idea_str, party_str, income group
+  - IVs that are negative and significant relationship
+    - m2_probit: female, trump_vote
+
+- Do the relationships on any of the other IVs change with the addition of income?
+  - With the addition of income, all the coefficients change in terms of beta value. The IV significance remain the same
+  - Generally, all the coefficients slightly changed when income_group was added
+  - age and party_str remained the same
+  - female, poc, ideo_str increased
+  - education, trump_vote decreased
+
+# Part 3: Fit Statistics Binned Residuals & Classification Accuracy.
+- Review the fit statistics comparing the nested models on AIC, BIC, Deviance, and the Likelihood Ratio Test. Calculate the p-value for the Likelihood Ratio Test difference using code along with the GLM Model fit function Download GLM Model fit function . Decide which model performs the best with this set of data.
+
+
+```{r}
+glm_fit(m1_probit)
+glm_fit(m2_probit)
+
+lr_test <- function(model1, model2, df) {
+  # Convert log-likelihoods to numeric
+  rest_lk <- as.numeric(logLik(model1))
+  unrest_lk <- as.numeric(logLik(model2))
+
+  # Calculate the likelihood ratio statistic
+  lr <- -2 * (rest_lk - unrest_lk)
+
+  # Calculate the p-value
+  p_value <- 1 - pchisq(lr, df)
+
+  # Return the likelihood ratio and p-value as a list
+  return(list(lr = lr, p_value = p_value))
+}
+
+result <- lr_test(m1_probit, m2_probit, df = 1)
+print(result)
+```
+- m2_probit has a higher likelihood ratio result and smaller deviance
+- The p-value of the lr_test is < 0.01 thus the result is significant
+- m2_probit also has lower AIC and BIC scores
+- Thus, it is a better model when we include income_group. m2_probit is the best model so far for this dataset.
+
+- For the best fitting model, calculate the classification accuracy. How much better are your models versus picking the modal response?
+
+```{r}
+data_clean <- na.omit(data)
+
+data_clean$predicted_probs<-predict(m2_probit, type="response")
+
+#Create new vector with 0|1 predictions from the model
+predicted_class <- ifelse(data_clean$predicted_probs >= 0.5, 1, 0)
+# Compare the predicted binary outcomes to the actual y
+actual_class <- data_clean$donate
+# Calculate the classification accuracy
+accuracy <- mean(predicted_class == actual_class)
+print(accuracy)
+
+# Calculate the classification accuracy improvement
+accuracy_improve <- accuracy-mean(data_clean$donate)
+print(accuracy_improve)
+
+# Convert to factor for comparison
+predicted_classes <- factor(predicted_class, levels = c(0, 1))
+actual_classes <- factor(actual_class, levels = c(0, 1))
+
+# Calculate confusion matrix
+confusion_matrix <- confusionMatrix(predicted_classes, actual_classes)
+confusion_matrix
+```
+
+m2_probit's accuracy is 77.69% which is 53% more accuracy than the modal model.
+
+- For the best fitting model, create a binned residual plot and evaluate the results that you see. Are there any patterns in the plot? Systematically missing at some points while accurate at others?
+
+```{r}
+bin_residuals_plot <- function(data, model, dependent_var, bin_var, bins = 5, bin_breaks = NULL) {
+  # Predict the probabilities
+  data$predicted_probs <- predict(model, type = "response")
+
+  # Calculate residuals
+  data$residuals <- data[[dependent_var]] - data$predicted_probs
+
+  # Create bins based on the specified variable
+  if (is.null(bin_breaks)) {
+    data$bins <- cut(data[[bin_var]], breaks = bins)
+  } else {
+    data$bins <- cut(data[[bin_var]], breaks = bin_breaks)
+  }
+
+  # Summarize the residuals for each bin
+  binned_data <- data %>%
+    group_by(bins) %>%
+    summarize(
+      mean_residual = mean(residuals),
+      ci_lower = mean_residual - 1.96 * sd(residuals) / sqrt(n()),
+      ci_upper = mean_residual + 1.96 * sd(residuals) / sqrt(n())
+    )
+
+  # Create a plot to visualize the mean residuals and their CIs
+  plot <- ggplot(binned_data, aes(x = bins, y = mean_residual)) +
+    geom_point(color = "black", size = 3) +      # Dot graph with points
+    geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2, position = position_dodge(width = 0.5)) +  # CIs
+    labs(x = paste("Bins of", bin_var), y = "Avg Binned Residual", title = "Binned Residuals with 95% CI") +
+    theme_minimal() +
+    geom_hline(yintercept=0, linetype="dashed",color="red")
+
+  return(plot)
+}
+
+bin_residuals_plot(data = data_clean, model = m2_probit, dependent_var = "donate", bin_var = "income_group", bins = 5)
+```
+
+# Part 4: Model Visualization
+Even if there were issues in the binned residual plot, use ggpredict function to create a predicted probability plot from your best performing model. Create two graphs with different independent variables. If the two variables you hypothesized about in Part 1 were significant, graph those results. If not, select a different significant predictor and graph that one.
+
+Then create a graph with using two IVs on the same plot. Variable one, on the x-axis, should have more than 2 scale points while variable two should be one of the significant dichotomous predictor variables (group by this variable). Your choice on which.
+
+Remember that with logit/probit, the predicted probabilities will be sensitive to the values of the IV selected. For ggpredict, it defaults to using the reference category for each factor variable so you might want to change the values for your graph.
+
+```{r}
+pred_data<-ggpredict(m2_probit, terms=c("income_group", "trump_vote")) #Manually set break points
+
+
+ggplot(pred_data, aes(x = x, y = predicted, color = factor(group))) +
+  geom_line() +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.05) +
+  labs(title = "Predicted to Donate Income Group vs Trump Voter",
+       x = "Square Footage",
+       y = "Group",
+       color = "Income Group or Trump Voter") +
+  scale_color_manual(values = c("0" = "blue", "1" = "red"),
+                     labels = c("0" = "Income Group", "1" = "Trump Voter")) +
+  theme_minimal()
+```
+
+# Part 5: Drawing Conclusions
+
+Draw a conclusion on what factors are related to if someone donates money to a political candidate or party. How would you describe the type of person who is most likely to donate based on your results?
+
+Based on my m2_probit model:
+- Factors that relate to more likely voting including being in a higher income group, having higher education, and having a stronger ideological tides. Being male seems to slightly increase being someone who donates.
+- A typical person who is likely to donate is a higher educated male, with higher income, and strong political ideological ties (who probably aren't Trump voters). This makes sense because
+  - Higher income people have extra money they can use to donate.
+  - Higher educated people tend to have higher incomes, they may be more political informed
+  - Stronger political ideology may motivate people to donate
+  - Maybe males are slight more common than females to be involved/interested in politics to donate

@@ -1,0 +1,83 @@
+---
+title: "Assignment 4"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(haven)
+library(skimr)
+library(stargazer)
+library(ggeffects)
+library(ggplot2)
+library(lmtest)
+library(corrplot)
+
+
+url <- "https://raw.githubusercontent.com/drCES/winter_603/main/crime_data.dta"
+crime_data <- read_dta(url)
+
+head(crime_data)
+
+crime_data_subset <- crime_data[,c("violentcrimesperpop", "policbudgperpop", "pctunemployed", "pctkids2par", "medincome", "racialmatchcommpol")]
+head(crime_data_subset)
+```
+
+# Assumption Diagnostics
+
+Working from the model you built above, test the different assumptions that we covered in class in Week 4. Specifically, evaluate...
+
+- Heteroskedasticity
+- Normality in your error term
+- Multicollinearity
+- Linearity between x and y
+- Impact of outliers
+
+If your analysis reveals any violations of any of the assumptions, describe ways to correct for that violation. You do not need to actually correct for it; just describe what could be done
+```{r}
+lm2 <- lm(violentcrimesperpop ~ policbudgperpop + pctunemployed + pctkids2par + medincome + racialmatchcommpol , data = crime_data)
+
+stargazer(lm2, digits = 2, type = "text", column.labels = c("LM2 without Pop"))
+```
+
+
+Checking Assumptions:
+```{r}
+par(mfrow=c(2,3)); plot(lm2, which=1:6)
+```
+
+- Heteroskedasticity
+The Residual vs Fitted graph seems to slightly indicates that our residual may not have constant variance as shown by the slight cone structure as fitted values increase. We will try the  Breusch-Pagan test to double check,
+
+```{r}
+bp_test <- bptest(lm2)
+bp_test
+```
+
+Our p-value is less than 0.05 thus we reject the null that our model is Homoscedastic.
+
+Solution: We could use Robust Standard Errors where we adjust our standard error based on variance of model lm2. We could also use squared residuals.
+
+- Normality in your error term
+The Q-Q Residual Plot seems to indicate our errors are normal. This is because most of the values are on the dotted line minus a handful of outliers. We can double check with the Shapiro-Wilk test.
+```{r}
+lm2_residuals <- residuals(lm2)
+shapiro.test(lm2_residuals)
+```
+
+The p-value of this test is greater than 0.05 and 0.1 thus we fail to reject the null that our model's error terms are normal. This assumption is not violated.
+
+
+- Multicollinearity
+Based on the correlation chart below, no IVs are perfectly correlated or highly correlated (greater than .8).
+```{r}
+crime_cor <- cor(crime_data_subset, use="pairwise.complete.obs")
+corrplot(crime_cor, method = 'color', addCoef.col = "black")
+```
+
+- Linearity between x and y
+Based on the Residual vs Fitted graph is linear as there is no curve in our data.
+
+- Impact of outliers
+Based on the cooks distance chart we see there are a few values with a cooks distance greater than 0.1 and several more values greater than 0.045 (4/88). Thus it might be helpful to look closer at these outliers to determine if they are anomolies that are worth removing.
